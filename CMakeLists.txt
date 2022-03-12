@@ -3,4 +3,4 @@ project(CChat C)
 
 set(CMAKE_C_STANDARD 99)
 
-add_executable(CChat main.c)
+add_executable(CChat Client.c)
