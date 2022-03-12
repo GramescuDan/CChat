@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <intrin.h>
+
 #include <winsock.h>
 
 typedef struct User{
@@ -13,8 +14,8 @@ typedef struct User{
     bool status;
 }User;
 
-int login(User user,unsigned int *socket) {
-    
+int login(User user,SOCKET *socket) {
+
     printf("Username:");
     scanf("%s", user.Username);
     printf("Password:");
@@ -33,7 +34,7 @@ int login(User user,unsigned int *socket) {
     strcat(message+strlen(user.Username)-1," ");
     strcat(message,user.Password);
 
-    return send(socket, message, strlen(message), 0);
+    return send(*socket, message, strlen(message), 0);
 }
 
 int main(int argc, char* argv[]) {
@@ -64,7 +65,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     user->ip = "127.0.0.1";
-    user->port = 1234;
+    user->port = 6999;
 
     skt_fd=socket(AF_INET,SOCK_STREAM,0);
     if(skt_fd<0){
