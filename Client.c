@@ -13,25 +13,34 @@ typedef struct User{
     bool status;
 }User;
 
-int login(User user) {
+int login(User user,unsigned int *socket) {
+    
     printf("Username:");
     scanf("%s", user.Username);
     printf("Password:");
     scanf("%s", user.Password);
-    //trebuie facuta legautra cu serverul
-    return 0;
+
+    int messagelength = strlen(user.Username) + strlen(user.Password);
+    char *message;
+    message = malloc(messagelength*sizeof(char));
+
+    if(message == NULL){
+        printf("Error:message malloc()");
+        exit(EXIT_FAILURE);
+    }
+
+    strcat(message,user.Username);
+    strcat(message+strlen(user.Username)-1," ");
+    strcat(message,user.Password);
+
+    return send(socket, message, strlen(message), 0);
 }
 
 int main(int argc, char* argv[]) {
 
     User *user;
     struct sockaddr_in server;
-    unsigned int skt=socket(AF_INET,SOCK_STREAM,0);
-
-    if(skt<0){
-        printf("Error:Socket()");
-        exit(EXIT_FAILURE);
-    }
+    unsigned int skt_fd;
 
     user = malloc(sizeof(User));
     if (user == NULL) {
@@ -55,17 +64,27 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     user->ip = "127.0.0.1";
-    user->port = 8888;
+    user->port = 1234;
+
+    skt_fd=socket(AF_INET,SOCK_STREAM,0);
+    if(skt_fd<0){
+        printf("Error:Socket()");
+        exit(EXIT_FAILURE);
+    }
 
     server.sin_addr.s_addr = inet_addr(user->ip);
     server.sin_family = AF_INET;
     server.sin_port = htons(user->port);
 
+    if(connect(skt_fd,(struct sockaddr *)&server,sizeof(server))<0){
+        printf("Error: Connect()");
+        exit(EXIT_FAILURE);
+    }
 
     printf("Welcome to CChat!\n---Log in---\n");
     while (1) {
-        if (login(*user) == 1) {
-            printf("Login Failed!\n Please try again");
+        if (login(*user,&skt_fd) == 1) {
+            printf("Login Failed!\nPlease try again!\n");
             continue;
         } else {
             user->status = true;
