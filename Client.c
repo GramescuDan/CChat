@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <intrin.h>
 
 typedef struct User{
     char *Username;
@@ -36,27 +37,53 @@ int main(int argc, char* argv[]){
         printf("User->Password:malloc()");
         exit(EXIT_FAILURE);
     }
-    int choice;
-    user->status = true;
-    printf("Hello World!\n Welcome to our messaging App!\n");
+
+    printf("Hello World!\nWelcome to our messaging App!\n");
     while(1){
         if(login(*user)==1){
             printf("Login Failed!\n Please try again");
 
         }else{
+            user->status = true;
             break;
         }
     }
-   // while(1){
-        printf("0.Exit\n1.See Who is Online\n2.");
+    int choice = 0;
+    char yesno[5];
+    char message[256];
+    while(1){
+        printf("1.See Who is Online\n2.Write Message to Chat\n0.LogOut\nYour Choice:");
+        scanf("%d",&choice);
         switch(choice) {
             case 0 :
-                user->status =false;
-                exit(EXIT_SUCCESS);
-            case 1 :
+                printf("\nAre you sure you want to log out?(yes/no)");
+                while(1) {
+                    scanf("%s", &yesno);
+                    if (strcmp(yesno, "yes") == 0) {
+                        user->status = false;
+                        exit(EXIT_SUCCESS);
+                    } else if (strcmp(yesno, "no") == 0) {
+                        break;
+                    } else {
+                        printf("Choice not recognized!\nTry again!\nYour Choice(yes/no):");
+                        continue;
+                    }
+                }
+                break;
+            case 1:
+                //trimitem request catre server ca dorim sa vedem cine e on
+                printf("status:%d",user->status);
+                break;
+            case 2:
+                printf("Your Message:");
+                scanf("%s",&message);
+                //Mesajul scris e trimis catre server.
+                break;
+
+            default :
                 break;
         }
-        //}
+        }
 
     }
 
