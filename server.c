@@ -51,14 +51,21 @@ Client *verifyCredentials(char *credentials) {
         if (strcmp(clientsDB[i].username, token) == 0) {
             token = strtok(NULL, " ");
             if(strcmp(clientsDB[i].password, token) == 0) {
+                // lock on 
+
+                printf("TESTARE1\n");
+
                 Client *client = (Client*)custom_alloc(sizeof(Client));
                 client->username = (char*)custom_alloc(sizeof(strlen(clientsDB[i].username) + 1));
                 client->password = (char*)custom_alloc(sizeof(strlen(clientsDB[i].password) + 1));
 
                 client->connection = (Connection*)custom_alloc(sizeof(Connection));
 
+                printf("TESTARE2\n");
                 strcpy(client->username, clientsDB[i].username);
                 strcpy(client->password, clientsDB[i].password);
+
+                // lock off
 
                 return client;
             }
@@ -97,7 +104,7 @@ int main(int argc, char **argv) {
     }
     printf("Socket successfully bound\n");
 
-    if ((listen(listen_fd, 10)) < 0) {
+    if ((listen(listen_fd, MAX_CLIENTS)) < 0) {
         printf("Error:listen()");
         exit(EXIT_FAILURE);
     }
@@ -112,12 +119,16 @@ int main(int argc, char **argv) {
             printf("Error:accept");
             exit(EXIT_FAILURE);
         }
+        printf("Accept succesfull\n");
 
         int read_message = read(connection_fd, buff, BUFMAX);
         if(read_message < 0) {
             printf("Error:read");
             exit(EXIT_FAILURE);
         }
+        printf("%s\n",buff);
+        printf("Read success\n");
+        
 
         Client *authorized_client = verifyCredentials(buff);
 
@@ -125,13 +136,27 @@ int main(int argc, char **argv) {
             // send error message to client
             // remetea's homework
         }
+        printf("Verify success\n");
 
-        Client *client = (Client*)custom_alloc(sizeof(Client));
-        client->connection->address = client_addr;
-        client->connection->sock_fd = connection_fd;
+        authorized_client->connection->address = client_addr;
+        authorized_client->connection->sock_fd = connection_fd;
 
-        send_login_confirmation(client);
+        printf("Before send\n");
 
+        send_login_confirmation(authorized_client);
+
+        printf("After send\n");
+
+
+        // verifici cu gramescu daca merge serveru -> client , client <- server
+        // 
+        // listen on port (socket) -> buffer contains "message" -> message and send to all auth clients
+
+        // threads
+        // every thread has its own buffer to avoid racing condition
+        // every intercepted listened message starts a thread with functions that does auth + message reception + message send to all clients
+        // use mutexes on clientDB when write into global DB
+        // no need for locks if you use isolated buffers.
 
         // NU UITA SA DEALOCI TOATA MEMORIA
     }
