@@ -17,7 +17,8 @@
 typedef struct Client {
     struct sockaddr_in address;
     int sock_fd;
-    char name[30];
+    char *username;
+    char *password;
 } Client;
 
 
@@ -57,6 +58,17 @@ int main(int argc, char **argv) {
         Client *client = (Client *) malloc(sizeof(Client));
         client->address = client_addr;
         client->sock_fd = connection_fd;
+
+        client->username = malloc(50 * sizeof(char));
+        if (client->username == NULL) {
+            printf("User->Username:malloc()");
+            exit(EXIT_FAILURE);
+        }
+        client->password = malloc(50 * sizeof(char));
+        if (client->password == NULL) {
+            printf("User->Password:malloc()");
+            exit(EXIT_FAILURE);
+        }
     }
 }
 

@@ -96,6 +96,8 @@ int main(int argc, char* argv[]) {
         if (login(*user,&skt_fd) == 1) {
             printf("Login Failed!\nPlease try again!\n");
             continue;
+        } else {
+            break;
         }
     }
 
