@@ -14,7 +14,7 @@ typedef struct User{
     bool status;
 }User;
 
-int login(User user,SOCKET *socket) {
+int login(User user,const SOCKET *socket) {
 
     printf("Username:");
     scanf("%s", user.Username);
@@ -34,7 +34,7 @@ int login(User user,SOCKET *socket) {
     strcat(message+strlen(user.Username)-1," ");
     strcat(message,user.Password);
 
-    return send(*socket, message, strlen(message), 0);
+    return send(*socket, message, messagelength, 0);
 }
 
 int main(int argc, char* argv[]) {
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     user->ip = "127.0.0.1";
-    user->port = 6999;
+    user->port = 4761;
 
     skt_fd=socket(AF_INET,SOCK_STREAM,0);
     if(skt_fd<0){
@@ -96,3 +96,5 @@ int main(int argc, char* argv[]) {
     printf("--CHAT--");
 
 }
+// gcc -Wall -o client Client.c -lws2_32
+//./client
