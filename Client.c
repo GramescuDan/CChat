@@ -1,4 +1,3 @@
-
 #include <stdio.h> 
 #include <stdlib.h>
 #include <string.h>  
@@ -24,7 +23,7 @@ typedef struct User{
     char *Password;
 }User;
 
-int login(User user,const SOCKET *socket) {
+int login(User user, int *socket) {
 
     printf("Username:");
     scanf("%s", user.Username);
@@ -51,7 +50,7 @@ int main(int argc, char* argv[]) {
 
     User *user;
     struct sockaddr_in server;
-    unsigned int skt_fd;
+    int skt_fd;
 
     user = malloc(sizeof(User));
     if (user == NULL) {
