@@ -1,17 +1,27 @@
-#include <stdio.h>
-#include <assert.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <intrin.h>
 
-#include <winsock.h>
+#include <stdio.h> 
+#include <stdlib.h>
+#include <string.h>  
+#include <sys/socket.h>  
+#include <unistd.h>
+#include <pthread.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <pthread.h>
+#include <sys/types.h>
+#include <signal.h>
 
 typedef struct User{
     int port;
     char *ip;
     char *Username;
     char *Password;
-    bool status;
 }User;
 
 int login(User user,const SOCKET *socket) {
@@ -87,9 +97,6 @@ int main(int argc, char* argv[]) {
         if (login(*user,&skt_fd) == 1) {
             printf("Login Failed!\nPlease try again!\n");
             continue;
-        } else {
-            user->status = true;
-            break;
         }
     }
 
