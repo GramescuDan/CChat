@@ -16,65 +16,72 @@
 #include <sys/types.h>
 #include <signal.h>
 
-typedef struct User{
-    int port;
-    char *ip;
+#define PORT 4761
+const char *IP= "127.0.0.1";
+
+typedef struct Client{
     char *Username;
     char *Password;
-}User;
+}Client;
 
-int login(User user, int *socket) {
-
-    printf("Username:");
-    scanf("%s", user.Username);
-    printf("Password:");
-    scanf("%s", user.Password);
-
-    int messagelength = strlen(user.Username) + strlen(user.Password);
-    char *message;
-    message = malloc(messagelength*sizeof(char));
-
-    if(message == NULL){
-        printf("Error:message malloc()");
+void *custom_alloc(int size) {
+    char mem = (char)malloc(size);
+    if(mem == NULL) {
+        fprintf(stderr, "Error memory allocation");
         exit(EXIT_FAILURE);
     }
+    return (void*)mem;
+}
 
-    strcat(message,user.Username);
-    strcat(message+strlen(user.Username)-1," ");
-    strcat(message,user.Password);
+Client *login(int *socket) {
+    
+    char *username;
+    username = (char*)custom_alloc(15*sizeof(char));
 
-    return send(*socket, message, messagelength, 0);
+    char *password;
+    password = (char*)custom_alloc(15*sizeof(char));
+    printf("Username:");
+    scanf("%s",username);
+    
+    char *message;
+    message = (char*)custom_alloc(50*sizeof(char));
+
+    strcat(message,username);
+    strcat(message + strlen(username)-1," ");
+
+    printf("Password:");
+    scanf("%s", password);
+
+    strcat(message,password);
+    send(*socket, message, strlen(message)+1, 0);
+
+    if(listen(*socket,1)<0){
+        printf("Error: listen()");
+        exit(EXIT_FAILURE);
+    }
+    char buffer;
+    int message_read = read(*socket, &buffer,sizeof(char));
+    if(message_read <0){
+        printf("Error:Read()");
+        exit(EXIT_FAILURE);
+    }
+    if(strcmp(buffer,"0")){
+        Client *client = (Client*)custom_alloc(sizeof(Client));
+        client->Username = (char*)custom_alloc(sizeof(strlen(username)));
+        client->Password = (char*)custom_alloc(sizeof(strlen(password)));
+
+        strcpy(client->Username,username);
+        strcpy(client->Password,password);
+
+    return client;
+    }
+    return NULL;
 }
 
 int main(int argc, char* argv[]) {
 
-    User *user;
     struct sockaddr_in server;
     int skt_fd;
-
-    user = malloc(sizeof(User));
-    if (user == NULL) {
-        printf("User:malloc()");
-        exit(EXIT_FAILURE);
-    }
-
-    user->Username = malloc(50 * sizeof(char));
-    if (user->Username == NULL) {
-        printf("User->Username:malloc()");
-        exit(EXIT_FAILURE);
-    }
-    user->Password = malloc(50 * sizeof(char));
-    if (user->Password == NULL) {
-        printf("User->Password:malloc()");
-        exit(EXIT_FAILURE);
-    }
-    user->ip = malloc(9 * sizeof(char));
-    if (user->ip == NULL) {
-        printf("User->Password:malloc()");
-        exit(EXIT_FAILURE);
-    }
-    user->ip = "127.0.0.1";
-    user->port = 4761;
 
     skt_fd=socket(AF_INET,SOCK_STREAM,0);
     if(skt_fd<0){
@@ -82,9 +89,9 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    server.sin_addr.s_addr = inet_addr(user->ip);
+    server.sin_addr.s_addr = inet_addr(IP);
     server.sin_family = AF_INET;
-    server.sin_port = htons(user->port);
+    server.sin_port = htons(PORT);
 
     if(connect(skt_fd,(struct sockaddr *)&server,sizeof(server))<0){
         printf("Error: Connect()");
@@ -93,7 +100,7 @@ int main(int argc, char* argv[]) {
 
     printf("Welcome to CChat!\n---Log in---\n");
     while (1) {
-        if (login(*user,&skt_fd) == 1) {
+        if (login(&skt_fd) == NULL) {
             printf("Login Failed!\nPlease try again!\n");
             continue;
         } else {
