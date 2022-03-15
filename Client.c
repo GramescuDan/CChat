@@ -16,100 +16,117 @@
 #include <sys/types.h>
 #include <signal.h>
 
-#define PORT 4761
-const char *IP= "127.0.0.1";
+#define PORT 5001
+#define PORT_SERVER 5000
+#define BUFFER_SIZE 512
 
-typedef struct Client{
-    char *Username;
-    char *Password;
-}Client;
+typedef enum {READ, WRITE} State;
+
+typedef enum {True, False} Boolean;
+
+const char *IP= "127.0.0.1";\
+char buffer[BUFFER_SIZE];
 
 void *custom_alloc(int size) {
-    char mem = (char)malloc(size);
+    void mem = (void)malloc(size);
     if(mem == NULL) {
         fprintf(stderr, "Error memory allocation");
         exit(EXIT_FAILURE);
     }
-    return (void*)mem;
+    return mem;
 }
 
-Client *login(int *socket) {
-    
-    char *username;
-    username = (char*)custom_alloc(15*sizeof(char));
-
-    char *password;
-    password = (char*)custom_alloc(15*sizeof(char));
-    printf("Username:");
-    scanf("%s",username);
-    
-    char *message;
-    message = (char*)custom_alloc(50*sizeof(char));
-
-    strcat(message,username);
-    strcat(message + strlen(username)-1," ");
-
-    printf("Password:");
-    scanf("%s", password);
-
-    strcat(message,password);
-    send(*socket, message, strlen(message)+1, 0);
-
-    if(listen(*socket,1)<0){
-        printf("Error: listen()");
-        exit(EXIT_FAILURE);
+void clear_buffer(char *buffer, int size) {
+    for(int i = 0; i < size; i++) {
+        buffer[i] = 0;
     }
-    char buffer;
-    int message_read = read(*socket, &buffer,sizeof(char));
-    if(message_read <0){
-        printf("Error:Read()");
-        exit(EXIT_FAILURE);
-    }
-    if(strcmp(buffer,"0")){
-        Client *client = (Client*)custom_alloc(sizeof(Client));
-        client->Username = (char*)custom_alloc(sizeof(strlen(username)));
-        client->Password = (char*)custom_alloc(sizeof(strlen(password)));
-
-        strcpy(client->Username,username);
-        strcpy(client->Password,password);
-
-    return client;
-    }
-    return NULL;
 }
 
 int main(int argc, char* argv[]) {
 
-    struct sockaddr_in server;
-    int skt_fd;
+    char username[BUFFER_SIZE];
+    char password[BUFFER_SIZE];
 
-    skt_fd=socket(AF_INET,SOCK_STREAM,0);
-    if(skt_fd<0){
+    printf("Username: ");
+    scanf("%s", username);
+
+    printf("Password: ");
+    scanf("%s", password);
+
+    clear_buffer(buffer, BUFFER_SIZE);
+
+    strcat(buffer, "~");
+    strcat(buffer, username);
+    strcat(buffer, " ");
+    strcat(buffer, password);
+
+    struct sockaddr_in client_addr;
+
+    client_addr.sin_family = AF_INET;
+    client_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    client_addr.sin_port = htons(PORT);
+
+    struct sockaddr_in server_addr;
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(PORT_SERVER);
+
+    int socket_sender_fd = socket(AF_INET,SOCK_STREAM,0);
+    if(socket_sender_fd < 0){
         printf("Error:Socket()");
         exit(EXIT_FAILURE);
     }
 
-    server.sin_addr.s_addr = inet_addr(IP);
-    server.sin_family = AF_INET;
-    server.sin_port = htons(PORT);
+    int socket_reciever_fd = socket(AF_INET,SOCK_STREAM,0);
+    if(socket_reciever_fd < 0){
+        printf("Error:Socket()");
+        exit(EXIT_FAILURE);
+    }
 
-    if(connect(skt_fd,(struct sockaddr *)&server,sizeof(server))<0){
+    if(connect(socket_sender_fd,(struct sockaddr *)&server_addr,sizeof(server_addr))<0){
         printf("Error: Connect()");
         exit(EXIT_FAILURE);
     }
 
-    printf("Welcome to CChat!\n---Log in---\n");
-    while (1) {
-        if (login(&skt_fd) == NULL) {
-            printf("Login Failed!\nPlease try again!\n");
-            continue;
-        } else {
-            break;
-        }
+    printf("\n%s\n", buffer);
+    if (send(socket_sender_fd, buffer, strlen(buffer), 0) <0 ) {
+        printf("Error:send()");
+        exit(EXIT_FAILURE);
     }
 
-    printf("--CHAT--");
+    if((listen(socket_reciever_fd, 1)) <0) {
+        printf("Error:listen");
+        exit(EXIT_FAILURE);
+    }
 
+    int response_fd = accept(socket_reciever_fd, (struct sockaddr )&server_addr,(socklen_t)sizeof(server_addr));
+    if(response_fd < 0) {
+        printf("Error:accept");
+        exit(EXIT_FAILURE);
+    }
+
+    clear_buffer(buffer, BUFFER_SIZE);
+    int message_read = read(response_fd, buffer, sizeof(char));
+    if(message_read < 0){
+        printf("Error:Read()");
+        exit(EXIT_FAILURE);
+    }
+    printf("%s\n", buffer);
+
+
+
+    // int state = READ;
+    // while(1) {
+    //     switch (state){
+    //         case READ:
+    //             state = WRITE;
+    //             break;
+    //         case WRITE:
+    //             state = READ;
+    //             break;
+    //     }
+    // }
 }
 // gcc -Wall -o client Client.c -lws2_32
 //./client
