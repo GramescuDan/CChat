@@ -136,3 +136,5 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
+
+//gcc -Wall -O2 -lpthread -o server server.c && ./server
