@@ -25,75 +25,94 @@ typedef struct {
 } Database;
 
 Database database[MAX_CLIENTS] = {
-    {"admin", "admin", NULL},
-    {"dragos", "dragos", NULL},
-    {"dan", "dan", NULL},
-    {"ioana", "ioana", NULL},
-    {"august", "august", NULL},
+    {"admin", "admin",      NULL},
+    {"dragos", "dragos",    NULL},
+    {"dan", "dan",          NULL},
+    {"ioana", "ioana",      NULL},
+    {"august", "august",    NULL},
 };
 
-pthread_mutex_t database_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // ~ login
 // ! mesaj
 void *client_handler(void *client_data) {
     Client* client = (Client*)client_data;
     char buffer[BUFFER_SIZE] = {0};
-    int verif = 0;
 
-    if(read(client->socket_fd, buffer, BUFFER_SIZE) < 0) {
+    if(read(client->socket_fd, buffer, 16) < 0) {
         printf("Error:read()\n");
         exit(EXIT_FAILURE);
     }
     
     const char op = buffer[0];
-    for(int i = 0; i < strlen(buffer)+1; i++) {
-        buffer[i] = buffer[i + 1];
+    for(int i = 1; i < strlen(buffer); i++) {
+        buffer[i - 1] = buffer[i];
     }
+    buffer[strlen(buffer) - 1] = '\0';
+
     if (op == '!') {
         printf("Am primit mesaj\n");
         for(int i = 0; i < MAX_CLIENTS; i++) {
             if(database[i].client != NULL) {
-                if(write(client->socket_fd, buffer, strlen(buffer))<0) {
+                pthread_mutex_lock(&mutex);
+                if(write(database[i].client->socket_fd, buffer, strlen(buffer))<0) {
                     printf("Error:write()");
                     exit(EXIT_FAILURE);
                 }
-                //send
+                pthread_mutex_unlock(&mutex);
             }
         }
-        //send message to all
-    } else if (op == '~') {
+    }
+    if (op == '~') {
         char *token = strtok(buffer, " ");
-        printf("Am primit logare\n");
+        printf("Login attempt\n");
         for(int i = 0; i < MAX_CLIENTS; i++) {
             if(!strcmp(database[i].username, token)){
                 token = strtok(NULL, " ");
                 if(!strcmp(database[i].password, token)){
-                    //pthread_mutex_lock(&database_mutex);
-                    database[i].client = client;
-                    printf("Verifiy success\n");
+                    printf("User %s logged in successfully\n", database[i].username);
+                    pthread_mutex_lock(&mutex);
+
+                    database[i].client = (Client*)client_data;
                     bzero(buffer, BUFFER_SIZE);
-                    strcat(buffer, "Succesful log in\n");
+                    strcat(buffer, "Succesful log in");
                     if (write(client->socket_fd, buffer, strlen(buffer)) < 0) {
                         printf("Error:write()");
                         exit(EXIT_FAILURE);
                     }
+
+                    pthread_mutex_unlock(&mutex);
+
                     break;
-                    //pthread_mutex_unlock(&database_mutex);
                 } else {
-                    printf("parola failed\n");
-                    //sent user is incorrect
+                    bzero(buffer, BUFFER_SIZE);
+                    strcat(buffer, "Failed log in\n");
+
+                    pthread_mutex_lock(&mutex);
+
+                    if (write(client->socket_fd, buffer, strlen(buffer)) < 0) {
+                        printf("Error:write()");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    pthread_mutex_unlock(&mutex);
+                    break;
                 }
             }
             if (i == MAX_CLIENTS - 1) {
-                printf("user failed\n");
-                //sent password is incorrect
+                printf("User not found\n");
+                bzero(buffer, BUFFER_SIZE);
+                pthread_mutex_lock(&mutex);
+                strcat(buffer, "Invalid user provided\n");
+                if (write(client->socket_fd, buffer, strlen(buffer)) < 0) {
+                    printf("Error:write()");
+                    exit(EXIT_FAILURE);
+                }
+                pthread_mutex_unlock(&mutex);
             }
         }    
-        //send succesful logging in
     }
-    close(client->socket_fd);
-    free(client_data);
     return NULL;
 }
 
@@ -120,6 +139,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    pthread_t t[MAX_CLIENTS] = {0};
+    int thread_counter = 0;
     while(1) {
         Client* new_client = (Client*)malloc(sizeof(Client));
         if(new_client == NULL) {
@@ -133,8 +154,12 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
         new_client->socket_fd = new_socket_fd;
-        //pthread_create
-        client_handler(new_client);
+
+        if(pthread_create((pthread_t*)&t[thread_counter], NULL, client_handler, (void*)(new_client)) != 0) {
+            printf("Error:pthread_create()\n");
+            exit(EXIT_FAILURE);
+        }
+        pthread_join(t[thread_counter], NULL);
     }
     return 0;
 }
