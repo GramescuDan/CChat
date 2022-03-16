@@ -37,60 +37,62 @@ pthread_mutex_t database_mutex = PTHREAD_MUTEX_INITIALIZER;
 // ~ login
 // ! mesaj
 void *client_handler(void *client_data) {
-    Client client = (Client)client_data;
+    Client* client = (Client*)client_data;
     char buffer[BUFFER_SIZE] = {0};
+    int verif = 0;
 
-    if(read(client.socket_fd, buffer, BUFFER_SIZE) < 0) {
+    if(read(client->socket_fd, buffer, BUFFER_SIZE) < 0) {
         printf("Error:read()\n");
         exit(EXIT_FAILURE);
     }
-
-
+    
     const char op = buffer[0];
-    for(int i = 1; i <= strlen(buffer); i++) {
+    for(int i = 0; i < strlen(buffer)+1; i++) {
         buffer[i] = buffer[i + 1];
     }
-    switch(op) {
-        case '!':
-            for(int i = 0; i < MAX_CLIENTS; i++) {
-                if(database[i].client != NULL) {
-                    write(client.socket_fd, buffer, strlen(buffer));
-                    //send
+    if (op == '!') {
+        printf("Am primit mesaj\n");
+        for(int i = 0; i < MAX_CLIENTS; i++) {
+            if(database[i].client != NULL) {
+                if(write(client->socket_fd, buffer, strlen(buffer))<0) {
+                    printf("Error:write()");
+                    exit(EXIT_FAILURE);
+                }
+                //send
+            }
+        }
+        //send message to all
+    } else if (op == '~') {
+        char *token = strtok(buffer, " ");
+        printf("Am primit logare\n");
+        for(int i = 0; i < MAX_CLIENTS; i++) {
+            if(!strcmp(database[i].username, token)){
+                token = strtok(NULL, " ");
+                if(!strcmp(database[i].password, token)){
+                    //pthread_mutex_lock(&database_mutex);
+                    database[i].client = client;
+                    printf("Verifiy success\n");
+                    bzero(buffer, BUFFER_SIZE);
+                    strcat(buffer, "Succesful log in\n");
+                    if (write(client->socket_fd, buffer, strlen(buffer)) < 0) {
+                        printf("Error:write()");
+                        exit(EXIT_FAILURE);
+                    }
+                    break;
+                    //pthread_mutex_unlock(&database_mutex);
+                } else {
+                    printf("parola failed\n");
+                    //sent user is incorrect
                 }
             }
-            //send message to all
-            break;
-
-        case '~':;
-            char *token = strtok(buffer, " ");
-            for(int i = 0; i < MAX_CLIENTS; i++) {
-                if(!strcmp(database[i].username, token)){
-                    token = strtok(NULL, " ");
-                    if(!strcmp(database[i].password, token)){
-                        pthread_mutex_lock(&database_mutex);
-                        database[i].client = &client;
-                        pthread_mutex_unlock(&database_mutex);
-                        break;
-                    } else {
-                        //sent password is incorrect
-                    }
-                }
-                if (i == MAX_CLIENTS - 1) { 
-                    //sent user not found
-                } 
-            }    
-            //send succesful logging in
-            bzero(buffer, BUFFER_SIZE);
-            strcat(buffer, "Succesful log in");
-            write(client.socket_fd, buffer, strlen(buffer));
-            // send       
-            break;
+            if (i == MAX_CLIENTS - 1) {
+                printf("user failed\n");
+                //sent password is incorrect
+            }
+        }    
+        //send succesful logging in
     }
-
-
-
-
-    close(client.socket_fd);
+    close(client->socket_fd);
     free(client_data);
     return NULL;
 }
@@ -119,7 +121,7 @@ int main(int argc, char *argv[]) {
     }
 
     while(1) {
-        Client new_client = (Client)malloc(sizeof(Client));
+        Client* new_client = (Client*)malloc(sizeof(Client));
         if(new_client == NULL) {
             printf("Error:malloc()");
             exit(EXIT_FAILURE);
@@ -136,3 +138,5 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
+
+//gcc -Wall -O2 -lpthread -o server server.c && ./server
