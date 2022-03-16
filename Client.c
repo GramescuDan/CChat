@@ -79,3 +79,5 @@ int main() {
     close(socket_fd);
     return 0;
 }
+
+///gcc -Wall -O2 -lpthread -o client client.c && ./client
