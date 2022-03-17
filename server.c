@@ -122,6 +122,7 @@ void *client_handler(void *client_data) {
 int main(int argc, char *argv[]) {
     pthread_t recv_msg;
     struct sockaddr_in server_addr = {0};
+    int option = 1;
 
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(socket_fd < 0) {
@@ -132,6 +133,11 @@ int main(int argc, char *argv[]) {
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     server_addr.sin_port = htons(SERVER_PORT);
+
+	if(setsockopt(socket_fd, SOL_SOCKET,(SO_REUSEPORT | SO_REUSEADDR),(char*)&option,sizeof(option)) < 0){
+		perror("ERROR: setsockopt failed");
+    return EXIT_FAILURE;
+	}
 
     if(bind(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         printf("Error:bind()\n");
@@ -146,12 +152,17 @@ int main(int argc, char *argv[]) {
 
     pthread_t t[MAX_CLIENTS] = {0};
     int thread_counter = 0;
+
+
     while(1) {
+        
         Client* new_client = (Client*)malloc(sizeof(Client));
         if(new_client == NULL) {
             printf("Error:malloc()");
             exit(EXIT_FAILURE);
         }
+
+        new_client->client_length = sizeof(new_client->client_addr);
 
         int new_socket_fd = accept(socket_fd, (struct sockaddr*)&new_client->client_addr, (socklen_t*)&new_client->client_length);
         if(new_socket_fd < 0) {

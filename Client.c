@@ -21,25 +21,32 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 void *send_message(void *arg) {
     int socket_fd = *(int*)arg;
     char local_buffer[BUFFER_SIZE] = {0};
-    local_buffer[0] = '!';
+    memset(local_buffer,0,sizeof(local_buffer));
+    strcat(local_buffer,"!");
     while(1) {
+
         for(int i = 1; i < BUFFER_SIZE - 1; i++) {
             char c = getchar();
-            if(c == '\n') break;
+            if(c == '\n') {
+                local_buffer[i]='\0';
+                break;}
             local_buffer[i] = c;
         }
+
         printf("*%s*\n", local_buffer);
 
         pthread_mutex_lock(&mutex);
 
-        if(write(socket_fd, local_buffer, strlen(local_buffer)) < 0) {
-            printf("Error:write()\n");
+        if(send(socket_fd, local_buffer, strlen(local_buffer),0) < 0) {
+            printf("Error:send()\n");
             exit(EXIT_FAILURE);
         }
         printf("S-a trimis mesajul\n");
-        
+
         pthread_mutex_unlock(&mutex);
+
     }
+
     return NULL;
 }
 
