@@ -28,12 +28,16 @@ void *send_message(void *arg) {
             if(c == '\n') break;
             local_buffer[i] = c;
         }
+        printf("*%s*\n", local_buffer);
 
         pthread_mutex_lock(&mutex);
-        if(send(socket_fd, local_buffer, strlen(local_buffer), 0) < 0) {
+
+        if(write(socket_fd, local_buffer, strlen(local_buffer)) < 0) {
             printf("Error:write()\n");
             exit(EXIT_FAILURE);
         }
+        printf("S-a trimis mesajul\n");
+        
         pthread_mutex_unlock(&mutex);
     }
     return NULL;
@@ -49,7 +53,7 @@ void *recv_message(void* arg) {
             perror("read");
             exit(EXIT_FAILURE);
         }
-        printf(">>>%s\n", local_buffer);
+        printf("%s\n", local_buffer);
     }
     return NULL;
 }
@@ -114,4 +118,3 @@ int main() {
 }
 
 ///gcc -Wall -O2 -o client Client.c -lpthread && ./client
-
