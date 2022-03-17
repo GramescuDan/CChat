@@ -1,166 +1,167 @@
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
 #include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 
-#define PORT 4761
+#define SERVER_PORT 5000
 #define MAX_CLIENTS 5
-#define BUFMAX 4096
+#define BUFFER_SIZE 512
 
-typedef enum {True, False} Boolean;
-
-//Client structure
-typedef struct Connection {
-    struct sockaddr_in address;
-    int sock_fd;
-} Connection;
-
-typedef struct Client {
-    char *username;
-    char *password;
-    Connection *connection;
+typedef struct Client{
+    int socket_fd;
+    struct sockaddr client_addr;
+    socklen_t client_length;
 } Client;
 
-Client clientsDB[MAX_CLIENTS] = {
-    {"admin", "admin"},
-    {"dragos", "dragos"},
-    {"dan", "dan"},
-    {"ioana", "ioana"},
-    {"august", "august"},
+typedef struct {
+    char username[BUFFER_SIZE / 8];
+    char password[BUFFER_SIZE / 8];
+    Client *client; // NULL - unauthorized | !NULL - authorized
+} Database;
+
+Database database[MAX_CLIENTS] = {
+    {"admin", "admin",      NULL},
+    {"dragos", "dragos",    NULL},
+    {"dan", "dan",          NULL},
+    {"ioana", "ioana",      NULL},
+    {"august", "august",    NULL},
 };
 
-void *custom_alloc(int size) {
-    char *mem = (char*)malloc(size);
-    if(mem == NULL) {
-        fprintf(stderr, "Error memory allocation");
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// ~ login
+// ! mesaj
+void *client_handler(void *client_data) {
+    Client* client = (Client*)client_data;
+    char buffer[BUFFER_SIZE] = {0};
+
+    if(read(client->socket_fd, buffer, 16) < 0) {
+        printf("Error:read()\n");
         exit(EXIT_FAILURE);
     }
-    return (void*)mem;
-}
+    
+    const char op = buffer[0];
+    for(int i = 1; i < strlen(buffer); i++) {
+        buffer[i - 1] = buffer[i];
+    }
+    buffer[strlen(buffer) - 1] = '\0';
 
-Connection *connected_clients[MAX_CLIENTS];
-
-Client *verifyCredentials(char *credentials) {
-    char *token = strtok(credentials," ");
-    for(int i =0; i < MAX_CLIENTS; i++) {
-        if (strcmp(clientsDB[i].username, token) == 0) {
-            token = strtok(NULL, " ");
-            if(strcmp(clientsDB[i].password, token) == 0) {
-                // lock on 
-
-                printf("TESTARE1\n");
-
-                Client *client = (Client*)custom_alloc(sizeof(Client));
-                client->username = (char*)custom_alloc(sizeof(strlen(clientsDB[i].username) + 1));
-                client->password = (char*)custom_alloc(sizeof(strlen(clientsDB[i].password) + 1));
-
-                client->connection = (Connection*)custom_alloc(sizeof(Connection));
-
-                printf("TESTARE2\n");
-                strcpy(client->username, clientsDB[i].username);
-                strcpy(client->password, clientsDB[i].password);
-
-                // lock off
-
-                return client;
+    if (op == '!') {
+        printf("Am primit mesaj\n");
+        for(int i = 0; i < MAX_CLIENTS; i++) {
+            if(database[i].client != NULL) {
+                pthread_mutex_lock(&mutex);
+                if(write(database[i].client->socket_fd, buffer, strlen(buffer))<0) {
+                    printf("Error:write()");
+                    exit(EXIT_FAILURE);
+                }
+                pthread_mutex_unlock(&mutex);
             }
         }
+    }
+    if (op == '~') {
+        char *token = strtok(buffer, " ");
+        printf("Login attempt\n");
+        for(int i = 0; i < MAX_CLIENTS; i++) {
+            if(!strcmp(database[i].username, token)){
+                token = strtok(NULL, " ");
+                if(!strcmp(database[i].password, token)){
+                    printf("User %s logged in successfully\n", database[i].username);
+                    pthread_mutex_lock(&mutex);
+
+                    database[i].client = (Client*)client_data;
+                    bzero(buffer, BUFFER_SIZE);
+                    strcat(buffer, "Succesful log in");
+                    if (write(client->socket_fd, buffer, strlen(buffer)) < 0) {
+                        printf("Error:write()");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    pthread_mutex_unlock(&mutex);
+
+                    break;
+                } else {
+                    bzero(buffer, BUFFER_SIZE);
+                    strcat(buffer, "Failed log in\n");
+
+                    pthread_mutex_lock(&mutex);
+
+                    if (write(client->socket_fd, buffer, strlen(buffer)) < 0) {
+                        printf("Error:write()");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    pthread_mutex_unlock(&mutex);
+                    break;
+                }
+            }
+            if (i == MAX_CLIENTS - 1) {
+                printf("User not found\n");
+                bzero(buffer, BUFFER_SIZE);
+                pthread_mutex_lock(&mutex);
+                strcat(buffer, "Invalid user provided\n");
+                if (write(client->socket_fd, buffer, strlen(buffer)) < 0) {
+                    printf("Error:write()");
+                    exit(EXIT_FAILURE);
+                }
+                pthread_mutex_unlock(&mutex);
+            }
+        }    
     }
     return NULL;
 }
 
-Boolean send_login_confirmation(Client *client) {
-    char *login_message = "1";
-    return send(client->connection->sock_fd, login_message, sizeof(login_message), 0) > 0 ? True : False;
-}
+int main(int argc, char *argv[]) {
+    struct sockaddr_in server_addr = {0};
 
-// aloca o zona de memorie cu dimensiune specificata ca parametru
-int main(int argc, char **argv) {
-
-    struct sockaddr_in server_addr;
-    struct sockaddr_in client_addr;
-    unsigned int listen_fd, connection_fd;
-    char buff[BUFMAX];
-
-    listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (listen_fd < 0) { 
-        printf("Error:socket()");
+    int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(socket_fd < 0) {
+        printf("Error:socket()\n");
         exit(EXIT_FAILURE);
     }
-    printf("Socket successfully created\n");
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_addr.sin_port = htons(PORT);
+    server_addr.sin_port = htons(SERVER_PORT);
 
-    if ((bind(listen_fd, (struct sockaddr *) &server_addr, sizeof(server_addr))) != 0) {
-        printf("Error:bind()");
+    if(bind(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        printf("Error:bind()\n");
         exit(EXIT_FAILURE);
     }
-    printf("Socket successfully bound\n");
 
-    if ((listen(listen_fd, MAX_CLIENTS)) < 0) {
-        printf("Error:listen()");
+    if(listen(socket_fd, MAX_CLIENTS) < 0){
+        printf("Error:listen()\n");
         exit(EXIT_FAILURE);
     }
-    printf("Server listening\n");
-    printf("   -> CChat <-   \n");
 
-    while (1) {
-        socklen_t client_length = sizeof(client_addr);
-        connection_fd = accept(listen_fd, (struct sockaddr *) &client_addr, &client_length);
-
-        if(connection_fd < 0) {
-            printf("Error:accept");
+    pthread_t t[MAX_CLIENTS] = {0};
+    int thread_counter = 0;
+    while(1) {
+        Client* new_client = (Client*)malloc(sizeof(Client));
+        if(new_client == NULL) {
+            printf("Error:malloc()");
             exit(EXIT_FAILURE);
         }
-        printf("Accept succesfull\n");
 
-        int read_message = read(connection_fd, buff, BUFMAX);
-        if(read_message < 0) {
-            printf("Error:read");
+        int new_socket_fd = accept(socket_fd, (struct sockaddr*)&new_client->client_addr, (socklen_t*)&new_client->client_length);
+        if(new_socket_fd < 0) {
+            printf("Error:accept()\n");
             exit(EXIT_FAILURE);
         }
-        printf("%s\n",buff);
-        printf("Read success\n");
-        
+        new_client->socket_fd = new_socket_fd;
 
-        Client *authorized_client = verifyCredentials(buff);
-
-        if(authorized_client == NULL) {
-            // send error message to client
-            // remetea's homework
+        if(pthread_create((pthread_t*)&t[thread_counter], NULL, client_handler, (void*)(new_client)) != 0) {
+            printf("Error:pthread_create()\n");
+            exit(EXIT_FAILURE);
         }
-        printf("Verify success\n");
-
-        authorized_client->connection->address = client_addr;
-        authorized_client->connection->sock_fd = connection_fd;
-
-        printf("Before send\n");
-
-        send_login_confirmation(authorized_client);
-
-        printf("After send\n");
-
-
-        // verifici cu gramescu daca merge serveru -> client , client <- server
-        // 
-        // listen on port (socket) -> buffer contains "message" -> message and send to all auth clients
-
-        // threads
-        // every thread has its own buffer to avoid racing condition
-        // every intercepted listened message starts a thread with functions that does auth + message reception + message send to all clients
-        // use mutexes on clientDB when write into global DB
-        // no need for locks if you use isolated buffers.
-
-        // NU UITA SA DEALOCI TOATA MEMORIA
+        pthread_join(t[thread_counter], NULL);
     }
+    return 0;
 }
 
-//gcc -Wall -o server server.c
-// ./server
+//gcc -Wall -O2 -lpthread -o server server.c && ./server

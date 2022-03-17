@@ -108,8 +108,10 @@ int main() {
 
     pthread_join(recv_msg, NULL);
 
+
     close(socket_fd);
     return 0;
 }
 
 ///gcc -Wall -O2 -o client Client.c -lpthread && ./client
+
