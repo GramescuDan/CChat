@@ -92,18 +92,21 @@ void *client_handler(void *client_data) {
 		char local[BUFFER_SIZE] ={0};
         //printf("Message incoming\n");
         for(int i = 0; i < MAX_CLIENTS; i++) {
-			
+		  bzero(local, BUFFER_SIZE);
             if(database[i].client != NULL) {
                 pthread_mutex_lock(&mutex);
-				if ((strcmp(database[i].client->client_name, client->client_name) != 0) && (strcmp(buffer, "") != 0)) {
+				if ((strcmp(database[i].client->client_name, client->client_name) != 0) && (strcmp(buffer, "") != 0) ) {
+					
 					strcat(local,client->client_name);
 					strcat(local, ": ");
 					strcat(local, buffer);
+					//strcat(local, "\n");
 				 if(write(database[i].client->socket_fd, local, strlen(local))<0) {
                     printf("Error:write()");
                     exit(EXIT_FAILURE);
                 }
 				}
+			
 
                 pthread_mutex_unlock(&mutex);
 				
