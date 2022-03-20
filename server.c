@@ -12,10 +12,15 @@
 #define MAX_CLIENTS 5
 #define BUFFER_SIZE 512
 
+int flag = 0;
+
+//close la socket cand serverul primeste exit de la client
+
 typedef struct Client{
     int socket_fd;
     struct sockaddr client_addr;
     socklen_t client_length;
+    char client_name[20];
 } Client;
 
 typedef struct {
@@ -32,50 +37,108 @@ Database database[MAX_CLIENTS] = {
     {"august", "august",    NULL},
 };
 
+
+void decrypt (char password[], int key){
+
+	
+	for(int i = 0; i < strlen(password); i++){
+		password[i] = password[i] + key;
+	}
+}
+
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // ~ login
 // ! mesaj
+
+
 void *client_handler(void *client_data) {
+	
+	while(1) { //while pentru mentinere in permanenta a legaturii dintre client si server
     Client* client = (Client*)client_data;
     char buffer[BUFFER_SIZE] = {0};
     bzero(buffer, BUFFER_SIZE);
-    if(read(client->socket_fd, buffer, 16) < 0) {
+    if(read(client->socket_fd, buffer, BUFFER_SIZE) < 0) {
         printf("Error:read()\n");
         exit(EXIT_FAILURE);
     }
-    
+
     const char op = buffer[0];
+	
+	
     for(int i = 1; i < strlen(buffer); i++) {
         buffer[i - 1] = buffer[i];
     }
     buffer[strlen(buffer) - 1] = '\0';
-    printf("*%s*\n", buffer);
+    if(strcmp(buffer, "exit") == 0){
+	printf("%s left the chat\n", client->client_name);
+	for(int i = 0; i < MAX_CLIENTS; i++){
+		if(strcmp(client->client_name, database[i].username) == 0){
+			free(database[i].client);
+			database[i].client = NULL;
+		}
+	}
+	break;
+    } else {
+	flag = 0;
+    }
+	
 
+	
+    if (strcmp(buffer, "") != 0 && strcmp(client->client_name, "") !=0 ){
+    	printf("%s says: %s\n", client->client_name, buffer);
+    }	 
     if (op == '!') {
-        printf("Message incoming\n");
+		char local[BUFFER_SIZE] ={0};
+        //printf("Message incoming\n");
         for(int i = 0; i < MAX_CLIENTS; i++) {
+			
             if(database[i].client != NULL) {
                 pthread_mutex_lock(&mutex);
-                if(write(database[i].client->socket_fd, buffer, strlen(buffer))<0) {
+				if ((strcmp(database[i].client->client_name, client->client_name) != 0) && (strcmp(buffer, "") != 0)) {
+					strcat(local,client->client_name);
+					strcat(local, ": ");
+					strcat(local, buffer);
+				 if(write(database[i].client->socket_fd, local, strlen(local))<0) {
                     printf("Error:write()");
                     exit(EXIT_FAILURE);
                 }
+				}
+
                 pthread_mutex_unlock(&mutex);
+				
+
             }
         }
     }
     if (op == '~') {
         char *token = strtok(buffer, " ");
         printf("Login attempt\n");
+		int ok = 0;
         for(int i = 0; i < MAX_CLIENTS; i++) {
             if(!strcmp(database[i].username, token)){
-                token = strtok(NULL, " ");
+				if(database[i].client != NULL){
+					char local[BUFFER_SIZE] = {0};
+					strcat(local, database[i].username);
+					strcat(local, " already signed in");
+					//printf("%s already signed in\n", database[i].username);
+						if (write(client->socket_fd, local, strlen(local)) < 0) {
+							printf("Error:write()");
+							exit(EXIT_FAILURE);
+							}
+						break;
+						
+				} 
+				token = strtok(NULL, " ");
+				decrypt(token, 0xAED);				
                 if(!strcmp(database[i].password, token)){
                     printf("User %s logged in successfully\n", database[i].username);
                     pthread_mutex_lock(&mutex);
 
                     database[i].client = (Client*)client_data;
+                    
+                    strcpy(database[i].client->client_name, database[i].username);
+                    
                     bzero(buffer, BUFFER_SIZE);
                     strcat(buffer, ">Hello ");
                     strcat(buffer, database[i].username);
@@ -91,14 +154,12 @@ void *client_handler(void *client_data) {
                 } else {
                     bzero(buffer, BUFFER_SIZE);
                     strcat(buffer, "Failed log in\n");
-
                     pthread_mutex_lock(&mutex);
 
                     if (write(client->socket_fd, buffer, strlen(buffer)) < 0) {
                         printf("Error:write()");
                         exit(EXIT_FAILURE);
                     }
-
                     pthread_mutex_unlock(&mutex);
                     break;
                 }
@@ -116,6 +177,7 @@ void *client_handler(void *client_data) {
             }
         }    
     }
+}
     return NULL;
 }
 
@@ -134,15 +196,11 @@ int main(int argc, char *argv[]) {
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     server_addr.sin_port = htons(SERVER_PORT);
 
-	if(setsockopt(socket_fd, SOL_SOCKET,(SO_REUSEPORT | SO_REUSEADDR),(char*)&option,sizeof(option)) < 0){
-		perror("ERROR: setsockopt failed");
-    return EXIT_FAILURE;
-	}
-
     if(bind(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         printf("Error:bind()\n");
         exit(EXIT_FAILURE);
     }
+
     printf(">Hello server, welcome to Cchat!\n");
 
     if(listen(socket_fd, MAX_CLIENTS) < 0){
@@ -171,20 +229,11 @@ int main(int argc, char *argv[]) {
         }
         new_client->socket_fd = new_socket_fd;
 
-        // if(pthread_create((pthread_t*)&t[thread_counter], NULL, client_handler, (void*)(new_client)) != 0) {
-        //     printf("Error:pthread_create()\n");
-        //     exit(EXIT_FAILURE);
-        // }
-        // pthread_join(t[thread_counter], NULL);
-
         if(pthread_create(&recv_msg, NULL, client_handler, (void*)(new_client)) < 0) {
             printf("Error:thread()");
             exit(EXIT_FAILURE);
         }
-        pthread_join(recv_msg, NULL);
     }
-
     return 0;
 }
 
-//gcc -Wall -O2 -o server server.c -lpthread && ./server

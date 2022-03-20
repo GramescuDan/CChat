@@ -8,17 +8,44 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <signal.h>
+
+#include "getch.c"
 
 #define SERVER_PORT 5000
 #define BUFFER_SIZE 512
 
+
+// close la socket cand clientul trimite mesajul "exit"
+int flag;
 const char SERVER_ADDR[]="127.0.0.1";
 char temp[BUFFER_SIZE / 2];
 char buffer[BUFFER_SIZE];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+void encrypt (char password[], int key){
+
+	
+	for(int i = 0; i < strlen(password); i++){
+		password[i] = password[i] - key;
+	}
+}
+
+void maskPass (char password[]){
+	char ch;
+	int i = 0;
+	while((ch = getch())!= '\n'){ //until user press enter
+	   if(ch != '\r'){
+			printf("*");
+			password[i] = ch;
+			i++;
+			}
+	   }
+	password[i] = '\0';
+}
 
 void *send_message(void *arg) {
+
     int socket_fd = *(int*)arg;
     char local_buffer[BUFFER_SIZE] = {0};
     memset(local_buffer,0,sizeof(local_buffer));
@@ -33,7 +60,7 @@ void *send_message(void *arg) {
             local_buffer[i] = c;
         }
 
-        printf("*%s*\n", local_buffer);
+        //printf("*%s*\n", local_buffer);
 
         pthread_mutex_lock(&mutex);
 
@@ -41,11 +68,18 @@ void *send_message(void *arg) {
             printf("Error:send()\n");
             exit(EXIT_FAILURE);
         }
-        printf("S-a trimis mesajul\n");
+	    if(strcmp(local_buffer, "!exit\0") == 0){
+			exit(EXIT_FAILURE);
+			break;
+	    }
+		else if(strcmp(local_buffer, "exit") != 0){
+        		//printf("S-a trimis mesajul\n");			
+		}
 
         pthread_mutex_unlock(&mutex);
 
     }
+    flag = 1;
 
     return NULL;
 }
@@ -53,14 +87,19 @@ void *send_message(void *arg) {
 void *recv_message(void* arg) {
     int socket_fd = *(int*)arg;
     char local_buffer[BUFFER_SIZE] = {0};
+       while(1) {
+       
+		  int receive = recv(socket_fd, local_buffer, BUFFER_SIZE, 0);  	
+          if (receive > 0) {
+                printf("%s\n", local_buffer);
+          	}
+          	else if (receive < 0) {
+          		break;
+          	}
+          	bzero(local_buffer,BUFFER_SIZE); //adaugat stergerea ultimului mesaj
+		
+	
 
-    while(1) {
-        if(read(socket_fd, local_buffer, BUFFER_SIZE) < 0) {
-            printf("Error:read()\n");
-            perror("read");
-            exit(EXIT_FAILURE);
-        }
-        printf("%s\n", local_buffer);
     }
     return NULL;
 }
@@ -81,15 +120,18 @@ int main() {
     server_addr.sin_addr.s_addr = inet_addr(SERVER_ADDR);
     server_addr.sin_port = htons(SERVER_PORT);
 
-    // int flag = 1;
-    // setsockopt(socket_fd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(int));
 
     if(connect(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0){
         printf("Error:connect()\n");
         exit(EXIT_FAILURE);
     }
-
-    // get credentials
+int tryAgain = 0;
+     char string[BUFFER_SIZE];
+do {
+	
+// get credentials
+	bzero(temp, BUFFER_SIZE);
+	
     strcat(buffer, "~");
     printf("Username: ");
     scanf("%s", temp);
@@ -99,29 +141,54 @@ int main() {
     bzero(temp, BUFFER_SIZE / 2);
 
     printf("Password: ");
-    scanf("%s", temp);
+	maskPass(temp);
+	encrypt(temp,0xAED);
+	printf("\n");
+ 
+ 
     strcat(buffer, temp);
-
-    if(write(socket_fd, buffer, strlen(buffer)) < 0) {
-        printf("Error:write()");
+    bzero(string, BUFFER_SIZE);
+    if(write(socket_fd, buffer, strlen(buffer)+1) < 0) {
+        printf("Error:send()");
         exit(EXIT_FAILURE);
     }
 
+	if(read(socket_fd, string, BUFFER_SIZE) < 0) {
+            		printf("Error:read()\n");
+            		perror("read");
+            		exit(EXIT_FAILURE);
+    }
+	printf("%s\n",string);
+    if (strcmp(string, "Failed log in\n") == 0 || strcmp(string, "Invalid user provided\n") == 0 || strstr(string, " already signed in") != NULL) {
+        tryAgain = 1;
+		bzero(buffer,BUFFER_SIZE);
+    
+    } else {
+		tryAgain = 0;
+	}
+    
+}while (tryAgain);
+
+	if(pthread_create(&send_msg, NULL, send_message, &socket_fd) < 0) {
+        printf("Error:thread()");
+        exit(EXIT_FAILURE);
+    }
+	
     if(pthread_create(&recv_msg, NULL, recv_message, &socket_fd) < 0) {
         printf("Error:thread()");
         exit(EXIT_FAILURE);
     }
 
-    if(pthread_create(&send_msg, NULL, send_message, &socket_fd) < 0) {
-        printf("Error:thread()");
-        exit(EXIT_FAILURE);
-    }
 
     pthread_join(recv_msg, NULL);
-
-
-    close(socket_fd);
+    
+        while (1) {
+        if (flag) {
+            break;
+        }
+    }
+	close(socket_fd);
     return 0;
 }
 
-///gcc -Wall -O2 -o client Client.c -lpthread && ./client
+
