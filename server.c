@@ -117,7 +117,6 @@ void *client_handler(void *client_data) {
     if (op == '~') {
         char *token = strtok(buffer, " ");
         printf("Login attempt\n");
-		int ok = 0;
         for(int i = 0; i < MAX_CLIENTS; i++) {
             if(!strcmp(database[i].username, token)){
 				if(database[i].client != NULL){
@@ -187,7 +186,6 @@ void *client_handler(void *client_data) {
 int main(int argc, char *argv[]) {
     pthread_t recv_msg;
     struct sockaddr_in server_addr = {0};
-    int option = 1;
 
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(socket_fd < 0) {
@@ -211,10 +209,6 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    pthread_t t[MAX_CLIENTS] = {0};
-    int thread_counter = 0;
-
-
     while(1) {
         
         Client* new_client = (Client*)malloc(sizeof(Client));
@@ -230,6 +224,7 @@ int main(int argc, char *argv[]) {
             printf("Error:accept()\n");
             exit(EXIT_FAILURE);
         }
+        
         new_client->socket_fd = new_socket_fd;
 
         if(pthread_create(&recv_msg, NULL, client_handler, (void*)(new_client)) < 0) {
