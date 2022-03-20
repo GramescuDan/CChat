@@ -14,7 +14,7 @@
 
 #define SERVER_PORT 5000
 #define BUFFER_SIZE 512
-
+#define  BACK_SPACE   0x08
 
 // close la socket cand clientul trimite mesajul "exit"
 int flag;
@@ -33,12 +33,20 @@ void encrypt (char password[], int key){
 
 void maskPass (char password[]){
 	char ch;
+	char buff1[] = "*";
+	char buff2[] = "\b \b";
 	int i = 0;
 	while((ch = getch())!= '\n'){ //until user press enter
-	   if(ch != '\r'){
-			printf("*");
+	   if(ch != BACK_SPACE){
+		   write(STDOUT_FILENO, buff1, sizeof(buff1) - 1);
 			password[i] = ch;
 			i++;
+			} else {
+				if (i > 0) {
+					write(STDOUT_FILENO, buff2, sizeof(buff2) - 1);
+					password[i] = '\0';
+					i--;	
+				}
 			}
 	   }
 	password[i] = '\0';
@@ -69,6 +77,7 @@ void *send_message(void *arg) {
             exit(EXIT_FAILURE);
         }
 	    if(strcmp(local_buffer, "!exit\0") == 0){
+			
 			exit(EXIT_FAILURE);
 			break;
 	    }
